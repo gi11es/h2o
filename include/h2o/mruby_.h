@@ -38,6 +38,7 @@ enum {
     H2O_MRUBY_LIT_SERVER_NAME,
     H2O_MRUBY_LIT_SERVER_ADDR,
     H2O_MRUBY_LIT_SERVER_PORT,
+    H2O_MRUBY_LIT_SERVER_PROTOCOL,
     H2O_MRUBY_LIT_CONTENT_LENGTH,
     H2O_MRUBY_LIT_REMOTE_ADDR,
     H2O_MRUBY_LIT_REMOTE_PORT,
@@ -125,6 +126,7 @@ typedef struct st_h2o_mruby_generator_t {
 #define H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK -6
 #define H2O_MRUBY_CALLBACK_ID_INVOKE_APP -7
 #define H2O_MRUBY_CALLBACK_ID_OUTPUT_FILTER_WAIT_CHUNK -8
+#define H2O_MRUBY_CALLBACK_ID_SLEEP -999
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
     if (mrb->exc != NULL)                                                                                                          \
@@ -186,6 +188,10 @@ mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_context_t *ctx, mrb_valu
 h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mrb_value obj, void (*cb)(h2o_mruby_generator_t *), h2o_mruby_generator_t *generator);
 void h2o_mruby_http_unset_shortcut(mrb_state *mrb, h2o_mruby_http_request_context_t *ctx, h2o_mruby_generator_t *generator);
 h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final);
+
+/* handler/mruby/sleep.c */
+void h2o_mruby_sleep_init_context(h2o_mruby_shared_context_t *ctx);
+mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again);
 
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);

@@ -82,6 +82,9 @@
     "    end\n"                                                                                                                    \
     "    [runner, configurator]\n"                                                                                                 \
     "  end\n"                                                                                                                      \
+    "  def sleep(*sec)\n"                                                                                                          \
+    "    _h2o__sleep(*sec)\n"                                                                                                      \
+    "  end\n"                                                                                                                      \
     "end\n"                                                                                                                        \
     "module H2O\n"                                                                                                                 \
     "  class App\n"                                                                                                                \

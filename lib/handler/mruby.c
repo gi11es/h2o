@@ -266,6 +266,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     SET_LITERAL(H2O_MRUBY_LIT_SERVER_NAME, "SERVER_NAME");
     SET_LITERAL(H2O_MRUBY_LIT_SERVER_ADDR, "SERVER_ADDR");
     SET_LITERAL(H2O_MRUBY_LIT_SERVER_PORT, "SERVER_PORT");
+    SET_LITERAL(H2O_MRUBY_LIT_SERVER_PROTOCOL, "SERVER_PROTOCOL");
     SET_LITERAL(H2O_MRUBY_LIT_CONTENT_LENGTH, "CONTENT_LENGTH");
     SET_LITERAL(H2O_MRUBY_LIT_REMOTE_ADDR, "REMOTE_ADDR");
     SET_LITERAL(H2O_MRUBY_LIT_REMOTE_PORT, "REMOTE_PORT");
@@ -319,6 +320,7 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
 
     h2o_mruby_send_chunked_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);
+    h2o_mruby_sleep_init_context(shared_ctx);
 
     struct RClass *module = mrb_define_module(shared_ctx->mrb, "H2O");
     struct RClass *generator_klass = mrb_define_class_under(shared_ctx->mrb, module, "Generator", shared_ctx->mrb->object_class);
@@ -481,6 +483,8 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     h2o_mruby_shared_context_t *shared = generator->ctx->shared;
     mrb_state *mrb = shared->mrb;
     mrb_value env = mrb_hash_new_capa(mrb, 16);
+    char http_version[sizeof("HTTP/1.0")];
+    size_t http_version_sz;
 
     /* environment */
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_REQUEST_METHOD),
@@ -499,6 +503,9 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
                                                       : mrb_str_new_lit(mrb, ""));
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SERVER_NAME),
                  mrb_str_new(mrb, generator->req->hostconf->authority.host.base, generator->req->hostconf->authority.host.len));
+    http_version_sz = h2o_stringify_protocol_version(http_version, generator->req->version);
+    mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SERVER_PROTOCOL),
+                 mrb_str_new(mrb, http_version, http_version_sz));
     {
         mrb_value h, p;
         stringify_address(generator->req->conn, generator->req->conn->callbacks->get_sockname, mrb, &h, &p);
@@ -597,7 +604,7 @@ static int handle_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_io
     h2o_strtolower(name.base, name.len);
 
     if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
-        if (token->proxy_should_drop) {
+        if (token->proxy_should_drop_for_res) {
             /* skip */
         } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
             req->res.content_length = h2o_strtosize(value.base, value.len);
@@ -714,7 +721,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
     /* flatten body if possible */
     if (mrb_array_p(body)) {
-        mrb_int i, len = mrb_ary_len(mrb, body);
+        mrb_int i, len = RARRAY_LEN(body);
         /* calculate the length of the output, while at the same time converting the elements of the output array to string */
         content.len = 0;
         for (i = 0; i != len; ++i) {
@@ -1088,7 +1095,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             goto Exit;
         } else if (status == H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP) {
             mrb_int i;
-            mrb_int len = mrb_ary_len(mrb, ctx->pendings);
+            mrb_int len = RARRAY_LEN(ctx->pendings);
             for (i = 0; i != len; ++i) {
                 mrb_value pending = mrb_ary_entry(ctx->pendings, i);
                 mrb_value resumer = mrb_ary_entry(pending, 0);
@@ -1126,6 +1133,9 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
                 break;
             case H2O_MRUBY_CALLBACK_ID_OUTPUT_FILTER_WAIT_CHUNK:
                 input = output_filter_wait_chunk_callback(ctx, receiver, args, &run_again);
+                break;
+            case H2O_MRUBY_CALLBACK_ID_SLEEP:
+                input = h2o_mruby_sleep_callback(ctx, receiver, args, &run_again);
                 break;
             default:
                 input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
@@ -1247,7 +1257,7 @@ int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_value 
 
     if (mrb_hash_p(headers)) {
         mrb_value keys = mrb_hash_keys(mrb, headers);
-        mrb_int i, len = mrb_ary_len(mrb, keys);
+        mrb_int i, len = RARRAY_LEN(keys);
         for (i = 0; i != len; ++i) {
             mrb_value k = mrb_ary_entry(keys, i);
             mrb_value v = mrb_hash_get(mrb, headers, k);
@@ -1256,7 +1266,7 @@ int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_value 
         }
     } else {
         assert(mrb_array_p(headers));
-        mrb_int i, len = mrb_ary_len(mrb, headers);
+        mrb_int i, len = RARRAY_LEN(headers);
         for (i = 0; i != len; ++i) {
             mrb_value pair = mrb_ary_entry(headers, i);
             if (!mrb_array_p(pair)) {

@@ -105,6 +105,10 @@ module Kernel
     [runner, configurator]
   end
 
+  def sleep(*sec)
+    _h2o__sleep(*sec)
+  end
+
 end
 
 module H2O
