@@ -434,6 +434,11 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     }
 }
 
+int h2o_response_is_started(h2o_req_t *req)
+{
+    return req->_generator != NULL;
+}
+
 void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
     size_t i;

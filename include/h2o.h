@@ -1287,6 +1287,8 @@ void h2o_reprocess_request_deferred(h2o_req_t *req, h2o_iovec_t method, const h2
  * @param generator the generator
  */
 void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
+int h2o_response_is_started(h2o_req_t *req);
+
 /**
  * called by filters to insert output-stream filters for modifying the response
  * @param req the request

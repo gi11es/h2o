@@ -746,18 +746,18 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
         body = mrb_nil_value();
     }
 
-    /* the response may have been already initiated by other handlers if H2O.call was called */
-    if (generator->req->_generator == NULL) {
-        h2o_start_response(generator->req, &generator->super);
-    }
-
-    /* use fiber in case we need to call #each */
-    if (!mrb_nil_p(body)) {
+    if (mrb_nil_p(body)) {
+        /* the response may have been already initiated by other handlers if H2O.call was called */
+        if (! h2o_response_is_started(generator->req)) {
+            h2o_start_response(generator->req, &generator->super);
+        }
+    } else {
         mrb_value receiver = h2o_mruby_send_chunked_init(generator, body);
         if (mrb->exc) {
             goto GotException;
         }
         if (!mrb_nil_p(receiver)) {
+            /* use fiber in case we need to call #each */
             mrb_value input = mrb_ary_new_capa(mrb, 2);
             mrb_ary_set(mrb, input, 0, body);
             mrb_ary_set(mrb, input, 1, generator->refs.generator);
@@ -781,10 +781,10 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
 GotException:
     report_exception(generator->req, mrb);
-    if (generator->output_filter_ostream == NULL) {
-        h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
-    } else {
+    if (h2o_response_is_started(generator->req)) {
         h2o_mruby_send_chunked_close(generator);
+    } else {
+        h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
     }
 }
 
@@ -1163,10 +1163,6 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
     if (generator == NULL)
         goto Exit;
     assert(generator->req != NULL);
-    if (generator->req->_generator != NULL) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpectedly received a rack response"));
-        goto GotException;
-    }
 
     send_response(generator, status, output, is_delegate);
     goto Exit;
@@ -1179,10 +1175,10 @@ GotException:
     } else {
         assert(generator->req != NULL);
         report_exception(generator->req, mrb);
-        if (generator->output_filter_ostream == NULL) {
-            h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
-        } else {
+        if (h2o_response_is_started(generator->req)) {
             h2o_mruby_send_chunked_close(generator);
+        } else {
+            h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
         }
     }
     mrb->exc = NULL;
