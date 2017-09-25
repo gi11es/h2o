@@ -42,7 +42,13 @@ my $pid = fork;
 die "fork failed:$!"
     if $pid == -1;
 if ($pid == 0) {
-    exec @ARGV;
+    my @cmd = ();
+    for my $el (@ARGV) {
+        my $clean = "$el";
+        ($clean) = $clean =~ /^(.*)$/;
+        push @cmd, $clean
+    }
+    exec @cmd;
     die "failed to exec $ARGV[0]:$!";
 }
 
@@ -58,6 +64,8 @@ while (waitpid($pid, 0) != $pid) {
 }
 
 if (defined $rmpath) {
-    exec '/bin/rm', '-rf', $rmpath;
+    my $clean = "$rmpath";
+    ($clean) = $clean =~ /^(.*)$/;
+    exec '/bin/rm', '-rf', $clean;
     die "failed to exec /bin/rm:$!";
 }
